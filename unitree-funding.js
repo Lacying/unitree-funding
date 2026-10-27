@@ -190,15 +190,19 @@
       const marker = element(svg, "circle", { r: 5, fill: `var(${color})`, class: "data-dot", visibility: "hidden" });
       markers.push([field, marker]);
     }
-    const crosshair = element(svg, "line", {
-      y1: margin.top, y2: height - margin.bottom, class: "crosshair", visibility: "hidden"
+    const hit = element(svg, "rect", {
+      x: margin.left, y: margin.top, width: plotWidth, height: plotHeight, class: "hit-area"
+    });
+    const crosshair = element(svg, "g", { class: "crosshair", visibility: "hidden" });
+    const vertical = element(crosshair, "line", {
+      y1: margin.top, y2: height - margin.bottom
+    });
+    const horizontal = element(crosshair, "line", {
+      x1: margin.left, x2: width - margin.right
     });
     svg.setSelection = record => {
       const index = records.findIndex(row => row.time === record.time);
       if (index < 0) return;
-      crosshair.setAttribute("x1", x(index));
-      crosshair.setAttribute("x2", x(index));
-      crosshair.setAttribute("visibility", "visible");
       for (const [field, marker] of markers) {
         const value = valueOf(record, field);
         marker.setAttribute("visibility", value == null ? "hidden" : "visible");
@@ -208,15 +212,23 @@
         }
       }
     };
-    const hit = element(svg, "rect", {
-      x: margin.left, y: margin.top, width: plotWidth, height: plotHeight, class: "hit-area"
-    });
+    svg.setCrosshair = (index, chartY) => {
+      vertical.setAttribute("x1", x(index));
+      vertical.setAttribute("x2", x(index));
+      horizontal.setAttribute("y1", chartY);
+      horizontal.setAttribute("y2", chartY);
+      crosshair.setAttribute("visibility", "visible");
+    };
+    svg.hideCrosshair = () => crosshair.setAttribute("visibility", "hidden");
     hit.addEventListener("pointermove", event => {
       const rect = svg.getBoundingClientRect();
       const chartX = (event.clientX - rect.left) * width / rect.width;
+      const chartY = Math.min(height - margin.bottom, Math.max(margin.top, (event.clientY - rect.top) * height / rect.height));
       const index = Math.min(records.length - 1, Math.max(0, Math.round((chartX - margin.left) * (records.length - 1) / plotWidth)));
       select(records[index]);
+      svg.setCrosshair(index, chartY);
     });
+    hit.addEventListener("pointerleave", svg.hideCrosshair);
     root.replaceChildren(svg);
     if (selectedTime != null) svg.setSelection(records.find(record => record.time === selectedTime) || records.at(-1));
   }
