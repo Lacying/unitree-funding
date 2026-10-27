@@ -6,7 +6,6 @@
   <title>UNITREE 资金费对比</title>
   <link rel="stylesheet" href="./radix-colors.css">
   <link rel="stylesheet" href="./unitree-funding.css">
-  <script defer src="./lightweight-charts.standalone.production.js"></script>
   <script defer src="./unitree-funding.js"></script>
 </head>
 <body>
@@ -16,14 +15,22 @@
         <h1>UNITREE 资金费对比</h1>
         <p class="context">Hyperliquid / para:UNITREE 与 xyz:UNITREE / 北京时间</p>
       </div>
-      <button id="refresh" type="button" class="refresh" title="刷新数据" aria-label="刷新数据">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 6.7M20 4v7h-7"/></svg>
-      </button>
+      <div class="top-actions">
+        <div class="periods" role="group" aria-label="时间范围">
+          <button type="button" data-hours="4" aria-pressed="false">4h</button>
+          <button type="button" data-hours="24" aria-pressed="false">1天</button>
+          <button type="button" data-hours="168" aria-pressed="true">7天</button>
+          <button type="button" data-hours="720" aria-pressed="false">30天</button>
+        </div>
+        <button id="refresh" type="button" class="refresh" title="刷新数据" aria-label="刷新数据">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 6.7M20 4v7h-7"/></svg>
+        </button>
+      </div>
     </header>
 
     <div id="status" class="status" role="status" aria-live="polite">正在获取历史资金费...</div>
 
-    <section class="summary" aria-label="最近 7 天累计">
+    <section class="summary" aria-label="所选时间范围累计">
       <div class="metric">
         <span class="metric-label"><i class="swatch para"></i>para 累计费率</span>
         <strong id="para-total">--</strong>
@@ -43,7 +50,7 @@
         <h2 id="chart-title">每小时资金费率</h2>
         <div class="legend"><span><i class="swatch para"></i>para</span><span><i class="swatch xyz"></i>xyz</span></div>
       </div>
-      <div id="chart" class="chart" role="img" aria-label="para 和 xyz 最近 7 天每小时资金费率折线图"></div>
+      <div id="chart" class="chart" role="img" aria-label="para 和 xyz 每小时资金费率曲线图"></div>
       <div class="selected" aria-live="polite">
         <span id="selected-time">--</span>
         <span>para <b id="selected-para">--</b></span>
@@ -58,7 +65,7 @@
         <h2 id="spread-title">每小时收盘价差</h2>
         <div class="legend"><span><i class="swatch spread"></i>xyz - para</span></div>
       </div>
-      <div id="spread-chart" class="chart" role="img" aria-label="xyz 与 para 最近 7 天每小时收盘价差折线图"></div>
+      <div id="spread-chart" class="chart" role="img" aria-label="xyz 与 para 每小时收盘价差曲线图"></div>
     </section>
 
     <section class="history" aria-labelledby="history-title">
