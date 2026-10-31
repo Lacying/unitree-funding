@@ -18,6 +18,8 @@
   const longSelect = $("long-market");
   const shortSelect = $("short-market");
   const periodButtons = [...document.querySelectorAll("[data-hours]")];
+  const marketPickers = new Map();
+  let openPicker = null;
   let hours = 168;
   let records = [];
   let selectedTime = null;
@@ -74,6 +76,141 @@
   const venue = coin => coin.includes(":") ? coin.slice(0, coin.indexOf(":")) : "Hyperliquid";
   const assetOf = coin => coin.includes(":") ? coin.slice(coin.indexOf(":") + 1) : coin;
 
+  function syncPicker(select) {
+    const picker = marketPickers.get(select);
+    if (!picker) return;
+    const { button, value, list } = picker;
+    value.textContent = select.selectedOptions[0]?.textContent || "--";
+    button.setAttribute("aria-label", `${select.getAttribute("aria-label")}：${value.textContent}`);
+    button.disabled = select.disabled;
+    list.replaceChildren(...[...select.options].map((item, index) => {
+      const option = document.createElement("div");
+      option.id = `${select.id}-option-${index}`;
+      option.className = "market-option";
+      option.setAttribute("role", "option");
+      option.setAttribute("aria-selected", String(item.selected));
+      option.dataset.value = item.value;
+      option.textContent = item.textContent;
+      return option;
+    }));
+  }
+
+  function closeMarketPicker() {
+    if (!openPicker) return;
+    const { button, list } = marketPickers.get(openPicker);
+    list.hidden = true;
+    button.setAttribute("aria-expanded", "false");
+    button.removeAttribute("aria-activedescendant");
+    openPicker = null;
+  }
+
+  function initPicker(select) {
+    const picker = document.createElement("div");
+    picker.className = "market-picker";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "market-trigger";
+    button.setAttribute("role", "combobox");
+    button.setAttribute("aria-haspopup", "listbox");
+    button.setAttribute("aria-controls", `${select.id}-options`);
+    button.setAttribute("aria-expanded", "false");
+    const value = document.createElement("span");
+    value.className = "market-value";
+    const arrow = document.createElementNS(svgNS, "svg");
+    arrow.setAttribute("viewBox", "0 0 24 24");
+    arrow.setAttribute("aria-hidden", "true");
+    const chevron = document.createElementNS(svgNS, "path");
+    chevron.setAttribute("d", "m6 9 6 6 6-6");
+    arrow.append(chevron);
+    button.append(value, arrow);
+    const list = document.createElement("div");
+    list.id = `${select.id}-options`;
+    list.className = "market-options";
+    list.setAttribute("role", "listbox");
+    list.setAttribute("aria-label", select.getAttribute("aria-label"));
+    list.hidden = true;
+    picker.append(button, list);
+    select.after(picker);
+    select.hidden = true;
+    marketPickers.set(select, { button, value, list, active: 0 });
+    syncPicker(select);
+
+    function highlight(index) {
+      const state = marketPickers.get(select);
+      const options = [...list.children];
+      if (!options.length) return;
+      state.active = Math.max(0, Math.min(options.length - 1, index));
+      const option = options[state.active];
+      button.setAttribute("aria-activedescendant", option.id);
+      for (const item of options) item.classList.toggle("active", item === option);
+      if (option.offsetTop < list.scrollTop) list.scrollTop = option.offsetTop;
+      else if (option.offsetTop + option.offsetHeight > list.scrollTop + list.clientHeight) {
+        list.scrollTop = option.offsetTop + option.offsetHeight - list.clientHeight;
+      }
+    }
+
+    function open() {
+      if (button.disabled) return;
+      closeMarketPicker();
+      list.hidden = false;
+      button.setAttribute("aria-expanded", "true");
+      openPicker = select;
+      highlight(select.selectedIndex);
+      requestAnimationFrame(() => {
+        if (openPicker !== select) return;
+        const overflow = list.getBoundingClientRect().bottom - innerHeight + 12;
+        if (overflow > 0) scrollBy({ top: overflow, behavior: "auto" });
+      });
+    }
+
+    function choose(option) {
+      if (!option || option.dataset.value === select.value) {
+        closeMarketPicker();
+        return;
+      }
+      select.value = option.dataset.value;
+      closeMarketPicker();
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      for (const item of [assetSelect, longSelect, shortSelect]) syncPicker(item);
+      button.focus({ preventScroll: true });
+    }
+
+    button.addEventListener("click", () => openPicker === select ? closeMarketPicker() : open());
+    button.addEventListener("keydown", event => {
+      const state = marketPickers.get(select);
+      if (event.key === "Escape" && openPicker === select) {
+        event.preventDefault();
+        closeMarketPicker();
+      } else if (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Home" || event.key === "End") {
+        event.preventDefault();
+        if (openPicker !== select) open();
+        else highlight(event.key === "Home" ? 0 : event.key === "End" ? list.children.length - 1
+          : state.active + (event.key === "ArrowDown" ? 1 : -1));
+      } else if (event.key === "Enter" && openPicker === select) {
+        event.preventDefault();
+        choose(list.children[state.active]);
+      } else if (event.key === " " && openPicker === select) {
+        event.preventDefault();
+        choose(list.children[state.active]);
+      } else if (event.key === "Tab") {
+        closeMarketPicker();
+      } else if (event.key.length === 1 && !event.altKey && !event.ctrlKey && !event.metaKey) {
+        const match = [...list.children].findIndex(option =>
+          option.dataset.value.toLowerCase().startsWith(event.key.toLowerCase()));
+        if (match !== -1) {
+          event.preventDefault();
+          if (openPicker !== select) open();
+          highlight(match);
+        }
+      }
+    });
+    list.addEventListener("click", event => choose(event.target.closest(".market-option")));
+    list.addEventListener("pointermove", event => {
+      const option = event.target.closest(".market-option");
+      if (option && list.contains(option)) highlight([...list.children].indexOf(option));
+    });
+  }
+
   function setOptions(select, values, selected) {
     select.replaceChildren(...values.map(value => {
       const option = document.createElement("option");
@@ -82,6 +219,7 @@
       return option;
     }));
     select.value = selected;
+    syncPicker(select);
   }
 
   function updateLabels() {
@@ -117,6 +255,8 @@
     if (!long || !short || long === short) return;
     longSelect.value = long;
     shortSelect.value = short;
+    syncPicker(longSelect);
+    syncPicker(shortSelect);
     if (coins[0] === long && coins[1] === short) return;
     coins = [long, short];
     selectedTime = null;
@@ -150,6 +290,7 @@
       assetSelect.disabled = false;
       longSelect.disabled = false;
       shortSelect.disabled = false;
+      for (const select of [assetSelect, longSelect, shortSelect]) syncPicker(select);
     }
   }
 
@@ -487,6 +628,17 @@
   assetSelect.disabled = true;
   longSelect.disabled = true;
   shortSelect.disabled = true;
+  for (const select of [assetSelect, longSelect, shortSelect]) initPicker(select);
+  document.addEventListener("pointerdown", event => {
+    if (openPicker && !marketPickers.get(openPicker).button.parentElement.contains(event.target)) {
+      closeMarketPicker();
+    }
+  });
+  document.addEventListener("focusin", event => {
+    if (openPicker && !marketPickers.get(openPicker).button.parentElement.contains(event.target)) {
+      closeMarketPicker();
+    }
+  });
   updateLabels();
   loadMarkets();
   load();

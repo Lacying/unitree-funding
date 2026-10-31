@@ -47,10 +47,37 @@ h2 { margin: 0; font-size: 16px; line-height: 1.4; font-weight: 600; }
 .markets { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 20px; }
 .markets label { display: grid; gap: 4px; min-width: 0; flex: 1 1 190px; color: var(--muted); font-size: 12px; }
 .markets select {
-  width: 100%; height: 36px; padding: 0 10px; border: .5px solid var(--line); border-radius: 6px;
+  width: 100%; height: 36px; padding: 0 32px 0 12px; border: .5px solid var(--line); border-radius: 6px;
   background: var(--surface); color: var(--ink); cursor: pointer; font-size: 14px;
 }
 .markets select:disabled { opacity: .6; cursor: wait; }
+.markets select[hidden] { display: none; }
+.market-picker { position: relative; min-width: 0; }
+.market-trigger {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; height: 36px; padding: 0 12px; border: .5px solid var(--line); border-radius: 6px;
+  background: var(--surface); color: var(--ink); text-align: left; cursor: pointer;
+}
+.market-trigger:hover { background: var(--slate-3); }
+.market-trigger:disabled { opacity: .6; cursor: wait; }
+.market-value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.market-trigger svg {
+  flex: none; width: 16px; height: 16px; margin-left: auto; fill: none; stroke: currentColor;
+  stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+}
+.market-options {
+  position: absolute; z-index: 10; top: calc(100% + 8px); left: 0; right: 0;
+  max-height: min(224px, 42vh); overflow-y: auto; padding: 4px;
+  border: .5px solid var(--slate-8); border-radius: 6px;
+  background: var(--surface); color: var(--ink);
+}
+.market-options[hidden] { display: none; }
+.market-option {
+  min-height: 36px; padding: 8px; border-radius: 4px; color: var(--ink);
+  font-size: 14px; line-height: 20px; overflow-wrap: anywhere; cursor: pointer;
+}
+.market-option.active { background: var(--slate-3); }
+.market-option[aria-selected="true"] { color: var(--blue-11); font-weight: 600; }
 .status { min-height: 22px; margin: 16px 0 12px; color: var(--muted); font-size: 12px; }
 .status.error { color: var(--negative); }
 .summary {
