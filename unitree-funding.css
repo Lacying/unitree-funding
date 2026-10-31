@@ -21,21 +21,21 @@ body {
   font: 14px/1.5 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
   font-variant-numeric: tabular-nums;
 }
-button { font: inherit; }
-button:focus-visible, tr:focus-visible { outline: 2px solid var(--blue-9); outline-offset: -2px; }
+button, select { font: inherit; }
+button:focus-visible, select:focus-visible, tr:focus-visible { outline: 2px solid var(--blue-9); outline-offset: 2px; }
 .page { max-width: 1160px; margin: 0 auto; padding: 28px 24px 56px; }
 .top, .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-h1 { margin: 0; font-size: 20px; line-height: 1.4; font-weight: 700; }
-h2 { margin: 0; font-size: 16px; line-height: 1.4; font-weight: 650; }
+h1 { margin: 0; font-size: 20px; line-height: 1.4; font-weight: 600; }
+h2 { margin: 0; font-size: 16px; line-height: 1.4; font-weight: 600; }
 .context { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
-.top-actions { display: flex; align-items: center; gap: 10px; flex: none; }
+.top-actions { display: flex; align-items: center; gap: 8px; flex: none; }
 .periods { display: inline-flex; padding: 2px; border: .5px solid var(--line); border-radius: 6px; background: var(--surface); }
 .periods button {
   min-width: 48px; height: 30px; padding: 0 8px; border: 0; border-radius: 4px;
   background: transparent; color: var(--muted); cursor: pointer;
 }
 .periods button:hover { background: var(--slate-3); }
-.periods button[aria-pressed="true"] { background: var(--blue-3); color: var(--blue-11); font-weight: 650; }
+.periods button[aria-pressed="true"] { background: var(--blue-3); color: var(--blue-11); font-weight: 600; }
 .refresh {
   display: grid; place-items: center; flex: none; width: 36px; height: 36px;
   border: .5px solid var(--line); border-radius: 6px;
@@ -44,6 +44,13 @@ h2 { margin: 0; font-size: 16px; line-height: 1.4; font-weight: 650; }
 .refresh:hover { background: var(--slate-3); }
 .refresh:disabled { opacity: .55; cursor: wait; }
 .refresh svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.markets { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 20px; }
+.markets label { display: grid; gap: 4px; min-width: 0; flex: 1 1 190px; color: var(--muted); font-size: 12px; }
+.markets select {
+  width: 100%; height: 36px; padding: 0 10px; border: .5px solid var(--line); border-radius: 6px;
+  background: var(--surface); color: var(--ink); cursor: pointer; font-size: 14px;
+}
+.markets select:disabled { opacity: .6; cursor: wait; }
 .status { min-height: 22px; margin: 16px 0 12px; color: var(--muted); font-size: 12px; }
 .status.error { color: var(--negative); }
 .summary {
@@ -54,15 +61,16 @@ h2 { margin: 0; font-size: 16px; line-height: 1.4; font-weight: 650; }
 .metric { min-width: 0; padding: 18px 20px; }
 .metric + .metric { border-left: .5px solid var(--line); }
 .metric-label { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
-.metric strong { display: block; margin-top: 8px; font-size: 20px; line-height: 1.3; font-weight: 650; }
+.metric strong { display: block; margin-top: 8px; font-size: 20px; line-height: 1.3; font-weight: 600; }
 .swatch { display: inline-block; flex: none; width: 9px; height: 9px; border-radius: 2px; background: currentColor; }
 .swatch.para { color: var(--para); }
 .swatch.xyz { color: var(--xyz); }
 .swatch.spread { color: var(--spread); }
-.chart-section { margin-top: 30px; }
+.chart-section { margin-top: 32px; }
 .legend { display: flex; gap: 18px; color: var(--muted); font-size: 12px; }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
-.chart { width: 100%; height: 350px; margin-top: 12px; background: var(--surface); border: .5px solid var(--line); touch-action: pan-y; }
+.chart { width: 100%; height: 360px; margin-top: 12px; background: var(--surface); border: .5px solid var(--line); touch-action: pan-y; }
+#spread-chart { height: 264px; }
 .chart svg { display: block; width: 100%; height: 100%; }
 .chart .grid-line, .chart .calendar-tick { stroke: var(--slate-6); stroke-width: .5; }
 .chart .calendar-tick { opacity: .65; }
@@ -72,12 +80,13 @@ h2 { margin: 0; font-size: 16px; line-height: 1.4; font-weight: 650; }
 .chart .crosshair { stroke: var(--slate-10); stroke-width: 1; stroke-dasharray: 4 4; pointer-events: none; }
 .chart .hit-area { fill: transparent; cursor: crosshair; }
 .selected {
-  display: flex; flex-wrap: wrap; gap: 8px 24px; min-height: 43px;
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; align-items: center; min-height: 48px;
   padding: 12px 0; border-bottom: .5px solid var(--line); color: var(--muted); font-size: 12px;
 }
-.selected b { color: var(--ink); font-weight: 650; }
-.selected span:first-child { color: var(--ink); font-weight: 650; }
-.history { margin-top: 28px; }
+.selected > span { min-width: 0; }
+.selected b { color: var(--ink); font-weight: 600; white-space: nowrap; }
+.selected > span:first-child { color: var(--ink); font-weight: 600; }
+.history { margin-top: 32px; }
 .muted { color: var(--muted); font-size: 12px; }
 .table-scroll { overflow-x: auto; margin-top: 12px; background: var(--surface); border-top: .5px solid var(--line); border-bottom: .5px solid var(--line); }
 table { width: 100%; min-width: 790px; border-collapse: collapse; text-align: right; }
@@ -99,12 +108,16 @@ td.negative, strong.negative { color: var(--negative); }
   .periods { flex: 1; }
   .periods button { flex: 1; min-width: 0; }
   .context { max-width: 270px; }
+  .markets { gap: 10px; }
+  .markets label:first-child { flex-basis: 100%; }
+  .markets label:not(:first-child) { flex-basis: calc(50% - 5px); }
   .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .metric { padding: 14px 12px; }
   .metric:nth-child(3) { grid-column: 1 / -1; border-left: 0; border-top: .5px solid var(--line); }
   .chart { height: 300px; }
-  .selected { gap: 5px 16px; }
-  .selected span:first-child { width: 100%; }
+  #spread-chart { height: 240px; }
+  .selected { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; }
+  .selected > span:first-child { grid-column: 1 / -1; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0ms !important; }

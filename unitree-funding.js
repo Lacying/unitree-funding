@@ -1,7 +1,8 @@
 (() => {
   const HOUR = 3600000;
   const API = "https://api.hyperliquid.xyz/info";
-  const coins = ["para:UNITREE", "xyz:UNITREE"];
+  let coins = ["para:UNITREE", "xyz:UNITREE"];
+  let markets = new Map();
   const $ = id => document.getElementById(id);
   const svgNS = "http://www.w3.org/2000/svg";
   const formatTime = time => new Intl.DateTimeFormat("zh-CN", {
@@ -13,12 +14,144 @@
   const status = $("status");
   const refresh = $("refresh");
   const body = $("history-body");
+  const assetSelect = $("asset");
+  const longSelect = $("long-market");
+  const shortSelect = $("short-market");
   const periodButtons = [...document.querySelectorAll("[data-hours]")];
   let hours = 168;
   let records = [];
   let selectedTime = null;
   let activeRequest = null;
   let requestNumber = 0;
+  let requestsInFlight = 0;
+  const pendingRequests = [];
+
+  function waitForSlot(signal) {
+    if (signal?.aborted) return Promise.reject(signal.reason);
+    if (requestsInFlight < 2) {
+      requestsInFlight++;
+      return Promise.resolve();
+    }
+    return new Promise((resolve, reject) => {
+      const entry = { resolve, reject, signal };
+      entry.abort = () => {
+        const index = pendingRequests.indexOf(entry);
+        if (index !== -1) pendingRequests.splice(index, 1);
+        reject(signal.reason);
+      };
+      signal?.addEventListener("abort", entry.abort, { once: true });
+      pendingRequests.push(entry);
+    });
+  }
+
+  function releaseSlot() {
+    const next = pendingRequests.shift();
+    if (next) {
+      next.signal?.removeEventListener("abort", next.abort);
+      next.resolve();
+    } else {
+      requestsInFlight--;
+    }
+  }
+
+  function pause(ms, signal) {
+    return new Promise((resolve, reject) => {
+      if (signal?.aborted) return reject(signal.reason);
+      const timer = setTimeout(done, ms);
+      function done() {
+        signal?.removeEventListener("abort", abort);
+        resolve();
+      }
+      function abort() {
+        clearTimeout(timer);
+        signal.removeEventListener("abort", abort);
+        reject(signal.reason);
+      }
+      signal?.addEventListener("abort", abort, { once: true });
+    });
+  }
+
+  const venue = coin => coin.includes(":") ? coin.slice(0, coin.indexOf(":")) : "Hyperliquid";
+  const assetOf = coin => coin.includes(":") ? coin.slice(coin.indexOf(":") + 1) : coin;
+
+  function setOptions(select, values, selected) {
+    select.replaceChildren(...values.map(value => {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = value;
+      return option;
+    }));
+    select.value = selected;
+  }
+
+  function updateLabels() {
+    const [long, short] = coins.map(venue);
+    const asset = assetOf(coins[0]);
+    $("page-title").textContent = `${asset} 资金费对比`;
+    document.title = `${asset} 资金费对比`;
+    $("context").textContent = `Hyperliquid / ${coins[0]} 与 ${coins[1]} / 北京时间`;
+    $("long-total-label").textContent = `${long} 累计费率`;
+    $("short-total-label").textContent = `${short} 累计费率`;
+    $("net-total-label").textContent = `多 ${long} / 空 ${short} 净费率`;
+    for (const id of ["long-legend", "selected-long-label", "long-column"]) $(id).textContent = long;
+    for (const id of ["short-legend", "selected-short-label", "short-column"]) $(id).textContent = short;
+    $("net-column").textContent = `多 ${long} / 空 ${short} 净费率`;
+    $("spread-legend").textContent = `${short} - ${long}`;
+    $("chart").setAttribute("aria-label", `${long} 和 ${short} 每小时资金费率曲线图`);
+    $("spread-chart").setAttribute("aria-label", `${short} 与 ${long} 每小时收盘价差曲线图`);
+    $("note").textContent = `负费率为空头支付给多头。净费率 = ${short} 费率 - ${long} 费率。收盘价差 = 2 × (${short} 收盘价 - ${long} 收盘价) / 两腿收盘价之和；使用上一小时 K 线收盘价，不是可成交的开仓差价。历史费率未计入手续费和价格变化。`;
+  }
+
+  function chooseMarkets(asset, preferred = []) {
+    const available = markets.get(asset);
+    if (!available?.length) return;
+    const first = available.includes(preferred[0]) ? preferred[0] : available[0];
+    const second = available.includes(preferred[1]) && preferred[1] !== first
+      ? preferred[1] : available.find(coin => coin !== first);
+    setOptions(longSelect, available, first);
+    setOptions(shortSelect, available, second);
+    setPair(first, second);
+  }
+
+  function setPair(long, short) {
+    if (!long || !short || long === short) return;
+    longSelect.value = long;
+    shortSelect.value = short;
+    if (coins[0] === long && coins[1] === short) return;
+    coins = [long, short];
+    selectedTime = null;
+    updateLabels();
+    load(true);
+  }
+
+  async function loadMarkets() {
+    try {
+      const metas = await post({ type: "allPerpMetas" });
+      const available = new Map();
+      for (const meta of metas) {
+        for (const contract of meta?.universe || []) {
+          if (typeof contract.name !== "string" || contract.isDelisted) continue;
+          const asset = assetOf(contract.name);
+          if (!available.has(asset)) available.set(asset, new Set());
+          available.get(asset).add(contract.name);
+        }
+      }
+      markets = new Map([...available]
+        .filter(([, contracts]) => contracts.size >= 2)
+        .map(([asset, contracts]) => [asset, [...contracts].sort((a, b) => a.localeCompare(b))]));
+      if (!markets.has("UNITREE")) markets.set("UNITREE", [...coins]);
+      setOptions(assetSelect, [...markets.keys()].sort((a, b) => a.localeCompare(b)), assetSelect.value);
+      if (!markets.has(assetSelect.value)) assetSelect.value = "UNITREE";
+      chooseMarkets(assetSelect.value, coins);
+    } catch (error) {
+      // The default pair remains usable if the market directory is unavailable.
+      status.textContent += ` / 币种列表获取失败：${error.message}`;
+    } finally {
+      assetSelect.disabled = false;
+      longSelect.disabled = false;
+      shortSelect.disabled = false;
+    }
+  }
 
   const theme = () => {
     document.documentElement.dataset.theme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
@@ -43,15 +176,32 @@
   }
 
   async function post(payload, signal) {
-    const response = await fetch(API, {
-      method: "POST", signal,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const result = await response.json();
-    if (!Array.isArray(result)) throw new Error("返回了无效数据");
-    return result;
+    await waitForSlot(signal);
+    try {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const response = await fetch(API, {
+            method: "POST", signal,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+          if (!response.ok) {
+            if (![429, 502, 503, 504].includes(response.status) || attempt === 2) {
+              throw new Error(`HTTP ${response.status}`);
+            }
+          } else {
+            const result = await response.json();
+            if (!Array.isArray(result)) throw new Error("返回了无效数据");
+            return result;
+          }
+        } catch (error) {
+          if (signal?.aborted || !(error instanceof TypeError) || attempt === 2) throw error;
+        }
+        await pause(500 * 3 ** attempt, signal);
+      }
+    } finally {
+      releaseSlot();
+    }
   }
 
   async function fetchHistory(coin, start, end, signal) {
@@ -86,7 +236,7 @@
       const tr = document.createElement("tr");
       tr.dataset.time = String(record.time);
       tr.tabIndex = 0;
-      tr.setAttribute("aria-label", `${formatTime(record.time)}，para ${formatRate(record.para)}，xyz ${formatRate(record.xyz)}，净费率 ${formatRate(record.net)}，收盘价差 ${record.spread == null ? "--" : `${record.spread.toFixed(4)}%`}`);
+      tr.setAttribute("aria-label", `${formatTime(record.time)}，${venue(coins[0])} ${formatRate(record.para)}，${venue(coins[1])} ${formatRate(record.xyz)}，净费率 ${formatRate(record.net)}，收盘价差 ${record.spread == null ? "--" : `${record.spread.toFixed(4)}%`}`);
       const cells = [
         formatTime(record.time), formatRate(record.para), formatRate(record.xyz), formatRate(record.net),
         record.spread == null ? "--" : `${record.spread > 0 ? "+" : ""}${record.spread.toFixed(4)}%`
@@ -237,10 +387,14 @@
     activeRequest?.abort();
     if (clear) {
       records = [];
+      selectedTime = null;
       body.innerHTML = '<tr><td colspan="5" class="empty">正在加载...</td></tr>';
       $("chart").replaceChildren();
       $("spread-chart").replaceChildren();
       $("row-count").textContent = "";
+      for (const id of ["selected-time", "selected-para", "selected-xyz", "selected-net", "selected-spread"]) {
+        $(id).textContent = "--";
+      }
       for (const id of ["para-total", "xyz-total", "net-total"]) {
         $(id).textContent = "--";
         $(id).className = "";
@@ -288,6 +442,10 @@
       select(records.find(row => row.time === selectedTime) || [...records].reverse().find(row => row.para != null || row.xyz != null));
       const spreadCount = records.filter(row => row.spread != null).length;
       status.textContent = `${formatTime(start)} 至 ${formatTime(end)} / ${paired.length} 个共同结算小时 / ${spreadCount} 个收盘价差 / 更新于 ${formatTime(Date.now())}`;
+      if (!paired.length) {
+        status.classList.add("error");
+        status.textContent += " / 两腿暂无共同结算数据";
+      }
       if (candles.some(result => result.status === "rejected")) {
         status.classList.add("error");
         status.textContent += " / K 线获取失败，请刷新重试";
@@ -295,7 +453,9 @@
     } catch (error) {
       if (current !== requestNumber) return;
       status.classList.add("error");
-      status.textContent = `获取失败：${error.message}。请点击刷新重试。`;
+      status.textContent = error instanceof TypeError
+        ? "连接 Hyperliquid 失败，请稍后刷新重试。"
+        : `获取失败：${error.message}。请点击刷新重试。`;
       if (!records.length) body.innerHTML = '<tr><td colspan="5" class="empty">暂无数据</td></tr>';
     } finally {
       if (current === requestNumber) refresh.disabled = false;
@@ -310,6 +470,24 @@
     periodButtons.forEach(item => item.setAttribute("aria-pressed", String(item === button)));
     load(true);
   }));
+  assetSelect.addEventListener("change", () => chooseMarkets(assetSelect.value));
+  longSelect.addEventListener("change", () => {
+    const long = longSelect.value;
+    const short = shortSelect.value === long
+      ? markets.get(assetSelect.value).find(coin => coin !== long) : shortSelect.value;
+    setPair(long, short);
+  });
+  shortSelect.addEventListener("change", () => {
+    const short = shortSelect.value;
+    const long = longSelect.value === short
+      ? markets.get(assetSelect.value).find(coin => coin !== short) : longSelect.value;
+    setPair(long, short);
+  });
   refresh.addEventListener("click", () => load());
+  assetSelect.disabled = true;
+  longSelect.disabled = true;
+  shortSelect.disabled = true;
+  updateLabels();
+  loadMarkets();
   load();
 })();
